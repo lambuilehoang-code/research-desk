@@ -1,66 +1,172 @@
 # Research Desk
+
 Desktop research app — **NotebookLM** + **OpenRouter** AI analysis.
+
 **You do NOT need PyCharm.** Only Python and a web browser.
+
 ---
+
 ## What you need first
+
 1. **Windows 10 or 11**
-2. **Python 3.10+** — https://www.python.org/downloads/  
+2. **Python 3.10, 3.11, or 3.12** — https://www.python.org/downloads/  
    - During install, check **“Add python.exe to PATH”**
-3. **OpenRouter API key** (free works) — https://openrouter.ai/settings/keys  
+   - **Avoid Python 3.14** for now (known subprocess issues with this app)
+3. **OpenRouter API key** (free works) — https://openrouter.ai/settings/keys
 4. **Google account** — for NotebookLM login
+
 ---
+
 ## Download
+
 1. Open the GitHub repo → green **Code** → **Download ZIP**
 2. Unzip to any folder (e.g. `C:\research-desk`)
-3. Open that folder in **File Explorer**
-4. Click the **address bar**, type `cmd`, press **Enter**
-You should see something like: `C:\research-desk>`
+3. Open the folder that contains **`app.py`** (GitHub ZIP may nest folders like `research-desk-master\research-desk-master` — that is normal)
+
 ---
+
 ## One-time setup (Windows)
-Run **one line at a time** in cmd (not all on one line):
-py -m venv .venv .venv\Scripts\activate.bat pip install -r requirements.txt playwright install copy .env.example .env
+
+Open **cmd** or **PowerShell** in the folder with `app.py`.
+
+**Run each command separately.** Press Enter after each line. Do **not** paste all lines as one line.
+
+```
+py -m venv .venv
+.venv\Scripts\pip.exe install -r requirements.txt
+.venv\Scripts\playwright.exe install
+copy .env.example .env
+```
+
+Or double-click **`setup.bat`** (same steps).
 
 ### Add your API key
-1. Open `.env` in **Notepad** (same folder as `app.py`)
+
+1. Open `.env` in **Notepad**
 2. Replace `sk-or-v1-paste-your-key-here` with **your** OpenRouter key
-3. Save the file
+3. Save
+
 **Never share `.env` — it contains your secret key.**
+
 ### Log in to NotebookLM (once)
-Still in cmd:
-py -m notebooklm login
 
-A browser opens — sign in with **your** Google account. When done, return to cmd.
+```
+.venv\Scripts\python.exe -m notebooklm login
+```
+
+Sign in with **your** Google account in the browser.
+
+Test (optional but recommended):
+
+```
+.venv\Scripts\python.exe -m notebooklm list
+```
+
 ---
+
 ## Run the app
-**Option A — cmd**
-cd C:\research-desk .venv\Scripts\activate.bat py app.py
 
-(Use your actual folder path instead of `C:\research-desk`.)
-**Option B — double-click**
-After one-time setup above, double-click **`run_app.bat`**.
-> Note: `run_app.bat` expects `.venv` to already exist. Run the setup steps first.
+```
+.venv\Scripts\python.exe app.py
+```
+
+Or double-click **`run_app.bat`** (after setup).
+
+**Do not use** `py app.py` — that skips the virtual environment and causes missing-module errors.
+
 ---
+
 ## First time inside the app
-1. **Settings** (sidebar) → paste OpenRouter key if you didn’t add it to `.env`
-2. **Login** (top bar) → complete NotebookLM in the browser
-3. **Refresh** → open **Notebook** → pick a notebook
-4. Type a question at the bottom → send
-Reports save locally in the `reports/` folder (created automatically).
----
-## Troubleshooting
-| Problem | Fix |
-|---------|-----|
-| `'py' is not recognized` | Reinstall Python with **Add to PATH** checked |
-| PowerShell blocks activate | Use **cmd** instead of PowerShell, or run `.venv\Scripts\activate.bat` |
-| `'pip' is not recognized` | Run `.venv\Scripts\activate.bat` first, or use `.venv\Scripts\pip.exe install -r requirements.txt` |
-| No notebooks listed | Click **Login**, finish in browser, then **Refresh** |
-| API key error | Edit `.env` or use **Settings** in the app |
----
-## Project layout
-app.py — start the GUI research_agent.py — research backend UI/ — app screens Styles/ — theme requirements.txt — Python packages .env.example — template (copy to .env) run_app.bat — quick launcher (after setup) reports/ — saved reports (local, not in GitHub)
+
+1. **Settings** → OpenRouter key (if not in `.env`)
+2. **Login** → NotebookLM in the browser
+3. **Refresh** → **Notebook** → pick a notebook
+4. Ask a question
+
+Reports save locally in `reports/` (not uploaded to GitHub).
 
 ---
+
+## Troubleshooting
+
+### Common setup mistakes
+
+| Mistake | What happens | Fix |
+|---------|--------------|-----|
+| Pasting all setup commands on **one line** | `venv: error: unrecognized arguments` | Run **one command per line** (see setup above) |
+| Running `py app.py` before setup | `No module named 'PyQt6'` or `No module named 'notebooklm'` | Run `setup.bat` or pip install first; use `.venv\Scripts\python.exe app.py` |
+| Using system Python instead of `.venv` | Missing modules even after install | Always use `.venv\Scripts\python.exe` and `.venv\Scripts\pip.exe` |
+| Wrong folder after ZIP download | `app.py` not found | Open the nested folder until you see `app.py` next to `requirements.txt` |
+| Using `git clone` without Git installed | `'git' is not recognized` | Use **Download ZIP** instead — Git is optional |
+
+### App errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `TypeError: 'NoneType' object is not iterable` on startup | Python **3.14** + Windows subprocess bug when loading notebooks | Use **Python 3.12** (`py -3.12 -m venv .venv`). Re-download latest ZIP |
+| App opens then closes immediately | NotebookLM not logged in or subprocess failed | Click **Login** → browser → **Refresh**. Run `.venv\Scripts\python.exe -m notebooklm list` first |
+| `UnicodeDecodeError: 'charmap' codec can't decode` | Windows encoding vs NotebookLM UTF-8 output | Fixed in latest code — re-download ZIP |
+| PowerShell: `Activate.ps1 cannot be loaded` | PowerShell script policy | Skip activate — use `.venv\Scripts\pip.exe` and `.venv\Scripts\python.exe` directly |
+| `Could not load notebooks` in status bar | Normal on first launch before login | **Login** → NotebookLM in browser → **Refresh** |
+| No notebooks listed after login | Session expired or wrong Google account | Run `.venv\Scripts\python.exe -m notebooklm login` again, then **Refresh** |
+| API key error | Missing or invalid OpenRouter key | Edit `.env` or **Settings** in the app |
+| Answers in English when you asked in Vietnamese | NotebookLM follows **source language** | Normal. Set **LANGUAGE=vi** in Settings for Claude's deep analysis |
+
+### Verify NotebookLM before opening the app
+
+```
+.venv\Scripts\python.exe -m notebooklm list
+```
+
+- **Works** → use **Login** + **Refresh** in the app
+- **Fails** → run `.venv\Scripts\python.exe -m notebooklm login` and try again
+
+### Fresh reinstall (last resort)
+
+In PowerShell (project folder):
+
+```
+Remove-Item -Recurse -Force .venv
+py -3.12 -m venv .venv
+.venv\Scripts\pip.exe install -r requirements.txt
+.venv\Scripts\playwright.exe install
+copy .env.example .env
+```
+
+Edit `.env`, login to NotebookLM, then run the app.
+
+---
+
+## Known bugs fixed (v1.1)
+
+1. **Startup crash on Windows (Python 3.14)** — `TypeError` when loading notebooks. Fixed in `research_agent.py`; app no longer crashes if notebooks fail on startup.
+2. **Unicode errors on Windows** — Fixed with `encoding="utf-8"` in subprocess calls.
+3. **README one-line command confusion** — Setup commands must be run separately; use `setup.bat` or follow steps above.
+4. **`run_app.bat` using wrong Python** — Now uses `.venv\Scripts\python.exe` and checks `.venv` exists.
+5. **Browse reports dialog dark background** — Report picker styling fixed in theme.
+
+**Recommended:** Python **3.10–3.12**. Use **3.12** if problems persist.
+
+---
+
+## Project layout
+
+```
+app.py              — start the GUI
+research_agent.py   — research backend
+UI/                 — app screens
+Styles/             — theme
+requirements.txt    — Python packages
+.env.example        — template (copy to .env)
+setup.bat           — one-time setup
+run_app.bat         — launch app (after setup)
+reports/            — saved reports (local only)
+```
+
+---
+
 ## Notes
-- Default AI model: `openrouter/free` (no paid credits required)
+
+- Default AI model: `openrouter/free`
 - Each user needs **their own** OpenRouter key and NotebookLM login
 - Do not commit or share `.env`
