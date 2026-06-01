@@ -129,7 +129,10 @@ class MainWindow(QMainWindow):
         self.topbar.search.textChanged.connect(self.on_search_changed)
 
         self._load_theme()
-        self.load_notebooks()
+        try:
+            self.load_notebooks()
+        except Exception:
+            self.topbar.set_status("Could not load notebooks — Login then Refresh")
         self.load_reports()
         self.refresh_credits()
         self.topbar.set_status("Ready")

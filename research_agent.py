@@ -126,13 +126,17 @@ def notebooklm_cmd(*args):
     return [PYTHON, "-m", "notebooklm", *args]
 
 
-def run_notebooklm(args, timeout=60):
+def run_notebooklm(cli_args, timeout=60):
     """Run a NotebookLM CLI command."""
+    cmd = [str(PYTHON), "-m", "notebooklm", *[str(a) for a in cli_args]]
     return subprocess.run(
-        notebooklm_cmd(*args),
+        cmd,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=timeout,
+        cwd=str(PROJECT_DIR),
     )
 
 
