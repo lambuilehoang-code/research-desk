@@ -81,9 +81,24 @@ Or double-click **`run_app.bat`** (after setup).
 1. **Settings** → OpenRouter key (if not in `.env`)
 2. **Login** → NotebookLM in the browser
 3. **Refresh** → **Notebook** → pick a notebook
-4. Ask a question
+4. Ask a question — **Vietnamese question → Vietnamese answer; English question → English answer**
 
 Reports save locally in `reports/` (not uploaded to GitHub).
+
+### Language
+
+The app **detects language from your question** (Vietnamese diacritics or common words → Vietnamese; otherwise English).
+
+- Ask in Vietnamese: `Tóm tắt nội dung chính của notebook`
+- Ask in English: `Summarize the main points of this notebook`
+
+**Settings → Default language** is only a fallback if the question is empty. You do **not** need `LANGUAGE=en` in `.env` for English answers — just ask in English.
+
+---
+
+## Updates for friends
+
+See **[UPDATE_FRIENDS.md](UPDATE_FRIENDS.md)** (Vietnamese) — how to download the latest ZIP or `git pull` after a GitHub push.
 
 ---
 
@@ -110,7 +125,7 @@ Reports save locally in `reports/` (not uploaded to GitHub).
 | `Could not load notebooks` in status bar | Normal on first launch before login | **Login** → NotebookLM in browser → **Refresh** |
 | No notebooks listed after login | Session expired or wrong Google account | Run `.venv\Scripts\python.exe -m notebooklm login` again, then **Refresh** |
 | API key error | Missing or invalid OpenRouter key | Edit `.env` or **Settings** in the app |
-| Answers in English when you asked in Vietnamese | NotebookLM follows **source language** | Normal. Set **LANGUAGE=vi** in Settings for Claude's deep analysis |
+| Wrong language in the report | Old build used fixed `LANGUAGE` in `.env` | **Update to latest code** (see `UPDATE_FRIENDS.md`). Ask in the language you want; use Vietnamese diacritics or clear Vietnamese words |
 | `TransportServerError`, `chat.ask retry timed out after 30.0s`, `NotebookLM timeout` | **Antivirus or firewall** slowing/blocking Chromium, Python, or Google | See **Antivirus & firewall** below |
 
 ### Antivirus & firewall

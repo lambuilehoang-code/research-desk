@@ -42,7 +42,10 @@ class SettingsDialog(QDialog):
         idx = self.lang_combo.findText(agent.LANGUAGE)
         if idx >= 0:
             self.lang_combo.setCurrentIndex(idx)
-        layout.addRow("Language:", self.lang_combo)
+        layout.addRow(
+            "Default language (fallback):",
+            self.lang_combo,
+        )
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save

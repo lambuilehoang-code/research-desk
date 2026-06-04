@@ -258,11 +258,119 @@ def select_notebook(notebooks):
         return None
 
 
+_VIETNAMESE_CHARS = (
+    "àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ"
+)
+_VIETNAMESE_WORDS = (
+    "của",
+    "và",
+    "là",
+    "có",
+    "không",
+    "này",
+    "cho",
+    "trong",
+    "với",
+    "gì",
+    "như",
+    "được",
+    "theo",
+    "tóm",
+    "tắt",
+    "phân",
+    "tích",
+)
+
+
+def reply_language_for_question(question: str) -> str:
+    """Detect vi/en from the user's question; fall back to LANGUAGE from .env."""
+    q = (question or "").strip()
+    if not q:
+        return (LANGUAGE or "vi").strip().lower()
+
+    lower = q.lower()
+    if any(c in lower for c in _VIETNAMESE_CHARS):
+        return "vi"
+    if sum(1 for w in _VIETNAMESE_WORDS if w in lower) >= 2:
+        return "vi"
+    return "en"
+
+
+def notebooklm_ask_text(question: str) -> str:
+    """Append a language hint so NotebookLM answers in the same language as the question."""
+    lang = reply_language_for_question(question)
+    if lang == "vi":
+        return f"{question}\n\nTrả lời bằng tiếng Việt."
+    return f"{question}\n\nAnswer in English."
+
+
+def _analysis_language_rule(lang: str) -> str:
+    if lang == "vi":
+        return (
+            "You MUST write the entire report in Vietnamese (tiếng Việt). "
+            "Do not use English."
+        )
+    return "You MUST write the entire report in English. Do not use Vietnamese."
+
+
+def _analysis_report_sections(lang: str) -> str:
+    if lang == "vi":
+        return """Structure your answer with these sections (write several paragraphs per section):
+
+        ## Tóm tắt điều hành
+        (1 đoạn đầy đủ — không chỉ 2 câu)
+
+        ## Phát hiện chính
+        (Ít nhất 5 phát hiện, mỗi mục 2–3 câu giải thích)
+
+        ## Phân tích sâu
+        (3–4 đoạn nối chủ đề, dữ liệu và ý nghĩa)
+
+        ## Rủi ro và thách thức
+        (Ít nhất 4 rủi ro, mỗi mục có giải thích)
+
+        ## Cơ hội
+        (Ít nhất 4 cơ hội, mỗi mục có giải thích)
+
+        ## Khuyến nghị hành động
+        (Ít nhất 5 khuyến nghị với bước cụ thể)
+
+        ## Kết luận
+        (1–2 đoạn)
+
+        Be thorough and long. Do not shorten the answer."""
+    return """Structure your answer with these sections (write several paragraphs per section):
+
+        ## Executive summary
+        (1 full paragraph — not just 2 sentences)
+
+        ## Key findings
+        (At least 5 detailed findings, each with 2–3 sentences of explanation)
+
+        ## Deep analysis
+        (3–4 paragraphs connecting themes, data, and implications)
+
+        ## Risks and challenges
+        (At least 4 risks, each explained)
+
+        ## Opportunities
+        (At least 4 opportunities, each explained)
+
+        ## Actionable recommendations
+        (At least 5 recommendations with concrete steps)
+
+        ## Conclusion
+        (1–2 paragraphs)
+
+        Be thorough and long. Do not shorten the answer."""
+
+
 def query_notebooklm(question, notebook_id):
     """Query NotebookLM and return answer with citations."""
+    ask_text = notebooklm_ask_text(question)
     try:
         result = run_notebooklm(
-            ["ask", question, "--json", "-n", notebook_id],
+            ["ask", ask_text, "--json", "-n", notebook_id],
             timeout=60,
         )
 
@@ -287,11 +395,15 @@ def query_notebooklm(question, notebook_id):
         return None
 
 
-def analyze_with_claude(notebook_answer):
-    """Send NotebookLM output to Claude for deep analysis."""
+def analyze_with_claude(notebook_answer, question=""):
+    """Send NotebookLM output to Claude for deep analysis (language follows the question)."""
     if not notebook_answer or not str(notebook_answer).strip():
         print("❌ NotebookLM had no answer text to analyze.")
         return None
+
+    lang = reply_language_for_question(question)
+    lang_rule = _analysis_language_rule(lang)
+    sections = _analysis_report_sections(lang)
 
     try:
         response = get_client().chat.completions.create(
@@ -302,7 +414,7 @@ def analyze_with_claude(notebook_answer):
                 {
                     "role": "system",
                     "content": f"""You are a senior research analyst specializing in investment and policy analysis.
-        Respond in {LANGUAGE.upper()}.
+        {lang_rule}
 
         Write a LONG, detailed report (aim for 800–1200 words unless the source material is very short).
         Do not be brief. Expand on each point with explanation, context, and examples from the source.
@@ -319,34 +431,15 @@ def analyze_with_claude(notebook_answer):
                 },
                 {
                     "role": "user",
-                    "content": f"""Based on this NotebookLM research, write a full in-depth analysis report:
+                    "content": f"""Based on this NotebookLM research, write a full in-depth analysis report.
 
+        The user's question was:
+        {question}
+
+        NotebookLM research:
         {notebook_answer}
 
-        Structure your answer with these sections (write several paragraphs per section):
-
-        ## Executive summary
-        (1 full paragraph — not just 2 sentences)
-
-        ## Key findings
-        (At least 5 detailed findings, each with 2–3 sentences of explanation)
-
-        ## Deep analysis
-        (3–4 paragraphs connecting themes, data, and implications)
-
-        ## Risks and challenges
-        (At least 4 risks, each explained)
-
-        ## Opportunities
-        (At least 4 opportunities, each explained)
-
-        ## Actionable recommendations
-        (At least 5 recommendations with concrete steps)
-
-        ## Conclusion
-        (1–2 paragraphs)
-
-        Be thorough and long. Do not shorten the answer.""",
+        {sections}""",
                 },
             ],
         )
@@ -566,7 +659,7 @@ def ask_question(notebook_id):
         return None
 
     print("\n🤖 Sending to Claude for analysis...")
-    claude_analysis = analyze_with_claude(answer)
+    claude_analysis = analyze_with_claude(answer, question)
 
     if not claude_analysis:
         print("❌ Failed to get Claude response")
@@ -633,7 +726,7 @@ def run_research(question, notebook_id):
         return {"ok": False, "error": "NotebookLM returned an empty answer."}
 
     analysis = ""
-    for chunk in analyze_with_claude(answer):
+    for chunk in analyze_with_claude(answer, question):
         analysis += chunk
 
     if not analysis:

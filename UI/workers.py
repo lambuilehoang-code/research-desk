@@ -26,7 +26,7 @@ class ResearchWorker(QThread):
             return
 
         analysis = ""
-        for chunk in agent.analyze_with_claude(answer):
+        for chunk in agent.analyze_with_claude(answer, self.question):
             analysis += chunk
             self.chunk.emit(chunk)
 
