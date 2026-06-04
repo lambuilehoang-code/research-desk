@@ -111,6 +111,44 @@ Reports save locally in `reports/` (not uploaded to GitHub).
 | No notebooks listed after login | Session expired or wrong Google account | Run `.venv\Scripts\python.exe -m notebooklm login` again, then **Refresh** |
 | API key error | Missing or invalid OpenRouter key | Edit `.env` or **Settings** in the app |
 | Answers in English when you asked in Vietnamese | NotebookLM follows **source language** | Normal. Set **LANGUAGE=vi** in Settings for Claude's deep analysis |
+| `TransportServerError`, `chat.ask retry timed out after 30.0s`, `NotebookLM timeout` | **Antivirus or firewall** slowing/blocking Chromium, Python, or Google | See **Antivirus & firewall** below |
+
+### Antivirus & firewall
+
+Research Desk uses **Python**, **Chromium (Playwright)**, and **saved Google login files**. Many antivirus apps treat that as suspicious and **slow or block** it — even when login looks OK, **asking a question** can still time out.
+
+**Typical symptoms when antivirus is the cause:**
+
+- Login works (`Already logged in`) but questions fail
+- `TransportServerError` or `chat.ask retry timed out after 30.0s`
+- `NotebookLM timeout (took too long)`
+- First run very slow; `pip install` or `playwright install` hangs
+
+**Fix (recommended): allowlist these paths**
+
+Replace `YourName` with the Windows username and adjust the project path if different:
+
+| What to allow | Path |
+|---------------|------|
+| Project folder | `C:\research-desk\` (or wherever you unzipped the app) |
+| Virtual environment | `...\research-desk-master\.venv\` |
+| NotebookLM login data | `C:\Users\YourName\.notebooklm\` |
+| Python in venv | `...\research-desk-master\.venv\Scripts\python.exe` |
+
+In your antivirus app, look for **Exclusions**, **Allowlist**, or **Trusted applications** and add the items above.
+
+**Also check:**
+
+1. Test https://notebooklm.google.com in Chrome on the **same PC and Wi‑Fi** — if the website is slow, fix network first
+2. Turn **VPN off** temporarily
+3. Allow **Python** and **Chromium** through **Windows Firewall** when prompted
+4. After changing antivirus settings, run login again:
+   ```
+   .venv\Scripts\python.exe -m notebooklm login
+   ```
+5. Try a **short** question first (large notebooks take longer)
+
+**Quick test:** If the app fails with antivirus **on** but works with real-time protection **off** (briefly, for testing only), the cause is confirmed — use allowlist instead of leaving protection off.
 
 ### Verify NotebookLM before opening the app
 
