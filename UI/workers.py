@@ -30,6 +30,18 @@ class ResearchWorker(QThread):
             analysis += chunk
             self.chunk.emit(chunk)
 
+        # #region agent log
+        agent._agent_debug_log(
+            "UI/workers.py:ResearchWorker:done",
+            "Worker finished Claude stream",
+            {
+                "analysis_len": len(analysis),
+                "analysis_preview": analysis[:500],
+            },
+            hypothesis_id="H2,H5",
+        )
+        # #endregion
+
         report_path = agent.save_report(self.question, nb_data, analysis)
         agent.save_message(self.notebook_id, "user", self.question)
         agent.save_message(self.notebook_id, "assistant", analysis)

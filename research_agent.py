@@ -34,6 +34,26 @@ REPORTS_DIR = PROJECT_DIR / "reports"
 CHAT_HISTORY_DIR = PROJECT_DIR / "chat_history"
 CHAT_HISTORY_DIR.mkdir(exist_ok=True)
 PYTHON = sys.executable
+_DEBUG_LOG_PATH = Path(r"c:\Users\acer\Documents\debug-ff45b0.log")
+
+
+def _agent_debug_log(location, message, data=None, hypothesis_id="", run_id="pre-fix"):
+    # #region agent log
+    try:
+        payload = {
+            "sessionId": "ff45b0",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data or {},
+            "timestamp": int(datetime.now().timestamp() * 1000),
+        }
+        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+    # #endregion
 
 VIETNAM_TZ = timezone(timedelta(hours=7))
 SESSION_API_CALLS = 0
@@ -405,6 +425,20 @@ def analyze_with_claude(notebook_answer, question=""):
     lang_rule = _analysis_language_rule(lang)
     sections = _analysis_report_sections(lang)
 
+    # #region agent log
+    _agent_debug_log(
+        "research_agent.py:analyze_with_claude:entry",
+        "Starting Claude analysis",
+        {
+            "model": CLAUDE_MODEL,
+            "lang": lang,
+            "question_len": len(question or ""),
+            "notebook_answer_len": len(str(notebook_answer or "")),
+        },
+        hypothesis_id="H1,H5",
+    )
+    # #endregion
+
     try:
         response = get_client().chat.completions.create(
             model=CLAUDE_MODEL,
@@ -448,16 +482,83 @@ def analyze_with_claude(notebook_answer, question=""):
         SESSION_API_CALLS += 1
 
         full_text = ""
+        chunk_idx = 0
+        resolved_model = CLAUDE_MODEL
         for chunk in response:
-            if chunk.choices[0].delta.content:
-                text = chunk.choices[0].delta.content
-                full_text += text
-                yield text
+            chunk_idx += 1
+            if getattr(chunk, "model", None):
+                resolved_model = chunk.model
+
+            choice = chunk.choices[0] if chunk.choices else None
+            delta = choice.delta if choice else None
+            content = delta.content if delta and delta.content else None
+            finish_reason = getattr(choice, "finish_reason", None) if choice else None
+
+            delta_extra = {}
+            if delta is not None:
+                dump = (
+                    delta.model_dump()
+                    if hasattr(delta, "model_dump")
+                    else getattr(delta, "__dict__", {})
+                )
+                delta_extra = {
+                    k: (str(v)[:200] if v is not None else None)
+                    for k, v in dump.items()
+                    if k != "content" and v is not None
+                }
+
+            if chunk_idx <= 3 or (content and "safety" in content.lower()):
+                # #region agent log
+                _agent_debug_log(
+                    "research_agent.py:analyze_with_claude:chunk",
+                    "Stream chunk received",
+                    {
+                        "chunk_idx": chunk_idx,
+                        "resolved_model": resolved_model,
+                        "content_preview": (content or "")[:300],
+                        "content_len": len(content or ""),
+                        "finish_reason": finish_reason,
+                        "delta_extra_keys": list(delta_extra.keys()),
+                        "delta_extra": delta_extra,
+                        "chunk_error": getattr(chunk, "error", None),
+                    },
+                    hypothesis_id="H1,H2,H3,H4",
+                )
+                # #endregion
+
+            if content:
+                full_text += content
+                yield content
+
+        # #region agent log
+        _agent_debug_log(
+            "research_agent.py:analyze_with_claude:done",
+            "Stream finished",
+            {
+                "resolved_model": resolved_model,
+                "total_chunks": chunk_idx,
+                "full_text_len": len(full_text),
+                "full_text_preview": full_text[:500],
+                "looks_like_safety_json": bool(
+                    re.search(r"user safety|response safety", full_text, re.I)
+                ),
+            },
+            hypothesis_id="H1,H2,H3",
+        )
+        # #endregion
 
         return full_text
 
     except Exception as e:
         err = str(e)
+        # #region agent log
+        _agent_debug_log(
+            "research_agent.py:analyze_with_claude:exception",
+            "Claude analysis failed",
+            {"error": err[:400], "model": CLAUDE_MODEL},
+            hypothesis_id="H3,H4",
+        )
+        # #endregion
         if "402" in err or "credit" in err.lower() or "insufficient" in err.lower():
             print("❌ OpenRouter: payment required (402) — cannot run this model now.")
             print("   The meter bar is your KEY cap, not wallet balance.")
