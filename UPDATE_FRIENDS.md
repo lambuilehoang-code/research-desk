@@ -29,23 +29,15 @@ git pull
 
 ---
 
-## Tính năng mới: nhiều tài khoản NotebookLM trong app
+## Đổi tài khoản Google (lưu trên máy, không cần đặt tên)
 
-1. Mở app → nút **Account** (góc trên)
-2. **Add account** → đặt tên (`ca_nhan`, `cong_viec`, …)
-3. Trong **Chrome**: đăng Google account muốn dùng → vào notebooklm.google.com
-4. Bấm **Sign in (Chrome)** trong dialog
-5. Bấm **Refresh** trong app
+1. App → **Switch account**
+2. **Mở Chromium** → ảnh Google → chọn tài khoản hoặc **Thêm tài khoản**
+3. Enter trong terminal → **Xong — tải notebook**
 
-**Đổi tài khoản:** chọn account → **Use selected** → **Refresh** (không cần logout).
+Google lưu tài khoản trong Chromium — lần sau chỉ chọn lại.
 
-Cài cookie reader (một lần, nếu Sign in Chrome báo lỗi):
-
-```powershell
-.venv\Scripts\pip.exe install "notebooklm-py[cookies]"
-```
-
-| Bạn hỏi | App trả lời |
+## Ngôn ngữ theo câu hỏi
 |---------|-------------|
 | Tiếng Việt (có dấu hoặc nhiều từ Việt) | Tiếng Việt |
 | Tiếng Anh | English |

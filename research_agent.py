@@ -208,12 +208,98 @@ def create_notebooklm_profile(name: str) -> tuple[bool, str]:
     return True, name
 
 
-def launch_notebooklm_login(profile=None, browser_cookies=True):
-    """Open login in a new terminal (Chrome cookies = fast, no Chromium lock)."""
-    profile = profile or get_notebooklm_profile()
-    cmd = [PYTHON, "-m", "notebooklm", "-p", profile, "login"]
+LAST_ACCOUNT_CACHE = PROJECT_DIR / ".notebooklm_last_account"
+
+
+def get_notebooklm_browser_profile_dir() -> Path:
+    """Persistent Chromium profile — Google accounts stay saved here."""
+    return Path.home() / ".notebooklm" / "profiles" / "default" / "browser_profile"
+
+
+def get_saved_google_accounts() -> list[str]:
+    """Emails remembered in the NotebookLM Chromium profile."""
+    emails: list[str] = []
+    local_state = get_notebooklm_browser_profile_dir() / "Local State"
+    if not local_state.exists():
+        return emails
+    try:
+        data = json.loads(local_state.read_text(encoding="utf-8"))
+        for acc in data.get("account_info", []):
+            if isinstance(acc, dict):
+                email = acc.get("email")
+                if email and email not in emails:
+                    emails.append(str(email))
+    except (json.JSONDecodeError, OSError, TypeError):
+        pass
+    return sorted(emails, key=str.lower)
+
+
+def get_active_google_account_hint() -> str | None:
+    """Best-effort email for the current saved session."""
+    if LAST_ACCOUNT_CACHE.exists():
+        try:
+            cached = LAST_ACCOUNT_CACHE.read_text(encoding="utf-8").strip()
+            if "@" in cached:
+                return cached
+        except OSError:
+            pass
+
+    storage = Path.home() / ".notebooklm" / "profiles" / "default" / "storage_state.json"
+    if storage.exists():
+        try:
+            data = json.loads(storage.read_text(encoding="utf-8"))
+            for cookie in data.get("cookies", []):
+                val = str(cookie.get("value", ""))
+                name = str(cookie.get("name", ""))
+                if name == "LSID" and "@" in val:
+                    for segment in val.replace("|", ":").split(":"):
+                        if "@" in segment and "." in segment:
+                            return segment.strip()
+        except (json.JSONDecodeError, OSError, TypeError):
+            pass
+
+    saved = get_saved_google_accounts()
+    if len(saved) == 1:
+        return saved[0]
+    return None
+
+
+def remember_active_google_account(email: str | None):
+    """Cache the account in use after a successful switch."""
+    if email and "@" in email:
+        try:
+            LAST_ACCOUNT_CACHE.write_text(email.strip(), encoding="utf-8")
+        except OSError:
+            pass
+
+
+def refresh_active_account_hint() -> str | None:
+    """Update cache from storage/cookies after login or notebook load."""
+    hint = get_active_google_account_hint()
+    if hint:
+        remember_active_google_account(hint)
+    return hint
+
+
+def launch_notebooklm_switch_account(fresh: bool = False):
+    """Open Chromium login — switch or add Google accounts; session persists in browser profile."""
+    cmd = [PYTHON, "-m", "notebooklm", "login"]
+    if fresh:
+        cmd.append("--fresh")
+    kwargs = {"cwd": str(PROJECT_DIR)}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
+    subprocess.Popen(cmd, **kwargs)
+
+
+def launch_notebooklm_login(profile=None, browser_cookies=False, fresh: bool = False):
+    """Legacy helper — prefer launch_notebooklm_switch_account for the GUI."""
     if browser_cookies:
-        cmd.extend(["--browser-cookies", "chrome"])
+        cmd = [PYTHON, "-m", "notebooklm", "login", "--browser-cookies", "chrome"]
+    else:
+        cmd = [PYTHON, "-m", "notebooklm", "login"]
+        if fresh:
+            cmd.append("--fresh")
     kwargs = {"cwd": str(PROJECT_DIR)}
     if sys.platform == "win32":
         kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
@@ -272,6 +358,7 @@ def fetch_notebooks():
         print("❌ No notebooks found. Create one in NotebookLM first.")
         return None
 
+    refresh_active_account_hint()
     return notebooks
 
 
@@ -338,7 +425,7 @@ def ensure_notebooklm_login():
         return notebooks
 
     print("⚠️  NotebookLM session expired or not logged in. Opening login...")
-    launch_notebooklm_login(get_notebooklm_profile(), browser_cookies=True)
+    launch_notebooklm_switch_account(fresh=False)
 
     print("🔄 Loading notebooks again...")
     return fetch_notebooks()

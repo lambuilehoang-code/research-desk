@@ -79,20 +79,20 @@ Or double-click **`run_app.bat`** (after setup).
 ## First time inside the app
 
 1. **Settings** → OpenRouter key (if not in `.env`)
-2. **Account** → sign in with Google (Chrome method recommended)
+2. **Switch account** → sign in or pick another Google account in Chromium
 3. **Refresh** → **Notebook** → pick a notebook
 4. Ask a question — **Vietnamese question → Vietnamese answer; English question → English answer**
 
-### Multiple NotebookLM accounts
+### Switch Google account (saved on this PC)
 
-Click **Account** in the top bar:
+Click **Switch account**:
 
-1. **Add account** — enter a name (e.g. `work`, `personal`) → **Add account**
-2. Sign into that Google account in **Chrome** → visit notebooklm.google.com
-3. **Sign in (Chrome)** in the dialog
-4. **Use selected** to switch between saved accounts → **Refresh**
+1. **Mở Chromium** — browser opens with your saved Google sessions
+2. Click your Google avatar → pick another account or **Add account**
+3. Press **Enter** in the terminal when NotebookLM loads
+4. **Xong — tải notebook** in the dialog, or **Refresh**
 
-No logout or Chromium profile conflicts when using **Sign in (Chrome)**.
+Accounts stay saved in Chromium — next time you only pick from the list, no re-login.
 
 Reports save locally in `reports/` (not uploaded to GitHub).
 

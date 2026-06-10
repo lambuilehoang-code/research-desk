@@ -26,7 +26,7 @@ from UI.source_hub_panel import SourceHubPanel
 from UI.analysis_panel import AnalysisPanel
 from UI.settings_dialog import SettingsDialog
 from UI.report_picker_dialog import ReportPickerDialog
-from UI.accounts_dialog import AccountsDialog
+from UI.switch_account_dialog import SwitchAccountDialog
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 
@@ -110,7 +110,7 @@ class MainWindow(QMainWindow):
         self.input_bar.input.returnPressed.connect(self.send_question)
 
         self.topbar.refresh_btn.clicked.connect(self.load_notebooks)
-        self.topbar.login_btn.clicked.connect(self.open_accounts)
+        self.topbar.login_btn.clicked.connect(self.open_switch_account)
         self.topbar.settings_btn.clicked.connect(self.open_settings)
         self.notebook_panel.refresh_btn.clicked.connect(self.load_notebooks)
         self.notebook_panel.notebook_list.currentRowChanged.connect(
@@ -132,8 +132,15 @@ class MainWindow(QMainWindow):
             self.topbar.set_status("Could not load notebooks — Login then Refresh")
         self.load_reports()
         self.refresh_credits()
-        self.topbar.set_status(f"Ready · account: {agent.get_notebooklm_profile()}")
+        self._update_account_status()
         self.on_nav_changed("chat")
+
+    def _update_account_status(self):
+        email = agent.get_active_google_account_hint()
+        if email:
+            self.topbar.set_status(f"Ready · {email}")
+        else:
+            self.topbar.set_status("Ready · chưa đăng nhập NotebookLM")
 
     def _load_theme(self):
         qss_path = PROJECT_DIR / "Styles" / "theme.qss"
@@ -273,21 +280,20 @@ class MainWindow(QMainWindow):
         self._current_notebook_title = ""
 
         if notebooks is None:
-            self.topbar.set_status("Could not load notebooks — try Login then Refresh")
+            self.topbar.set_status("Could not load notebooks — Switch account then Refresh")
             self.notebooks = []
             return
 
         self.notebooks = notebooks
         if not self.notebooks:
-            self.topbar.set_status("No notebooks — Login then Refresh")
+            self.topbar.set_status("No notebooks — Switch account then Refresh")
             return
 
         self._populate_notebook_list()
         if self.notebook_panel.notebook_list.count():
             self.notebook_panel.notebook_list.setCurrentRow(0)
-        self.topbar.set_status(
-            f"{len(self.notebooks)} notebooks · account: {agent.get_notebooklm_profile()}"
-        )
+        agent.refresh_active_account_hint()
+        self._update_account_status()
         self.load_reports()
 
     def on_notebook_selected(self, row: int):
@@ -335,24 +341,14 @@ class MainWindow(QMainWindow):
     def refresh_analysis(self):
         self.analysis_panel.refresh(self.notebook_id, self._current_notebook_title)
 
-    def open_accounts(self):
-        dlg = AccountsDialog(self)
-        dlg.accounts_changed.connect(self._on_accounts_changed)
+    def open_switch_account(self):
+        dlg = SwitchAccountDialog(self)
+        dlg.account_changed.connect(self._on_account_switched)
         dlg.exec()
 
-    def _on_accounts_changed(self):
+    def _on_account_switched(self):
         self.load_notebooks()
-
-    def login_notebooklm(self):
-        """Quick sign-in for the active account (Chrome cookies)."""
-        self.topbar.set_status("Signing in via Chrome...")
-        agent.launch_notebooklm_login(agent.get_notebooklm_profile(), browser_cookies=True)
-        QMessageBox.information(
-            self,
-            "NotebookLM sign-in",
-            "Sign into Google in Chrome first, then click Refresh.\n"
-            "For multiple accounts, use the Account button.",
-        )
+        self._update_account_status()
 
     def load_reports(self):
         self.report_paths = list(agent.list_report_files())
