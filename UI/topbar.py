@@ -28,7 +28,7 @@ class TopBar(QWidget):
         self.status_label.setObjectName("topPill")
         layout.addWidget(self.status_label)
 
-        self.login_btn = QPushButton("Login")
+        self.login_btn = QPushButton("Account")
         self.login_btn.setObjectName("topPill")
         self.refresh_btn = QPushButton("Refresh")
         self.refresh_btn.setObjectName("topPill")

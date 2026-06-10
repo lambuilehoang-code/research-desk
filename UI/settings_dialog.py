@@ -64,5 +64,6 @@ class SettingsDialog(QDialog):
             api_key=key,
             model=self.model_input.text().strip() or "openrouter/free",
             language=self.lang_combo.currentText(),
+            notebooklm_profile=agent.get_notebooklm_profile(),
         )
         return True

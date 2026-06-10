@@ -16,9 +16,6 @@ from PyQt6.QtGui import QFontMetrics
 import research_agent as agent
 from UI.workers import ResearchWorker
 
-import subprocess
-import sys
-
 from UI.topbar import TopBar
 from UI.app_sidebar import AppSidebar
 from UI.notebook_panel import NotebookPanel
@@ -29,8 +26,8 @@ from UI.source_hub_panel import SourceHubPanel
 from UI.analysis_panel import AnalysisPanel
 from UI.settings_dialog import SettingsDialog
 from UI.report_picker_dialog import ReportPickerDialog
+from UI.accounts_dialog import AccountsDialog
 
-PYTHON = sys.executable
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -113,7 +110,7 @@ class MainWindow(QMainWindow):
         self.input_bar.input.returnPressed.connect(self.send_question)
 
         self.topbar.refresh_btn.clicked.connect(self.load_notebooks)
-        self.topbar.login_btn.clicked.connect(self.login_notebooklm)
+        self.topbar.login_btn.clicked.connect(self.open_accounts)
         self.topbar.settings_btn.clicked.connect(self.open_settings)
         self.notebook_panel.refresh_btn.clicked.connect(self.load_notebooks)
         self.notebook_panel.notebook_list.currentRowChanged.connect(
@@ -135,7 +132,7 @@ class MainWindow(QMainWindow):
             self.topbar.set_status("Could not load notebooks — Login then Refresh")
         self.load_reports()
         self.refresh_credits()
-        self.topbar.set_status("Ready")
+        self.topbar.set_status(f"Ready · account: {agent.get_notebooklm_profile()}")
         self.on_nav_changed("chat")
 
     def _load_theme(self):
@@ -288,7 +285,9 @@ class MainWindow(QMainWindow):
         self._populate_notebook_list()
         if self.notebook_panel.notebook_list.count():
             self.notebook_panel.notebook_list.setCurrentRow(0)
-        self.topbar.set_status(f"{len(self.notebooks)} notebooks loaded")
+        self.topbar.set_status(
+            f"{len(self.notebooks)} notebooks · account: {agent.get_notebooklm_profile()}"
+        )
         self.load_reports()
 
     def on_notebook_selected(self, row: int):
@@ -336,16 +335,23 @@ class MainWindow(QMainWindow):
     def refresh_analysis(self):
         self.analysis_panel.refresh(self.notebook_id, self._current_notebook_title)
 
+    def open_accounts(self):
+        dlg = AccountsDialog(self)
+        dlg.accounts_changed.connect(self._on_accounts_changed)
+        dlg.exec()
+
+    def _on_accounts_changed(self):
+        self.load_notebooks()
+
     def login_notebooklm(self):
-        self.topbar.set_status("Opening NotebookLM login...")
-        subprocess.Popen(
-            [PYTHON, "-m", "notebooklm", "login"],
-            cwd=str(PROJECT_DIR),
-        )
+        """Quick sign-in for the active account (Chrome cookies)."""
+        self.topbar.set_status("Signing in via Chrome...")
+        agent.launch_notebooklm_login(agent.get_notebooklm_profile(), browser_cookies=True)
         QMessageBox.information(
             self,
-            "NotebookLM login",
-            "Complete login in the browser, then click Refresh.",
+            "NotebookLM sign-in",
+            "Sign into Google in Chrome first, then click Refresh.\n"
+            "For multiple accounts, use the Account button.",
         )
 
     def load_reports(self):

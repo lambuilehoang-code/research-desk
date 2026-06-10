@@ -34,26 +34,6 @@ REPORTS_DIR = PROJECT_DIR / "reports"
 CHAT_HISTORY_DIR = PROJECT_DIR / "chat_history"
 CHAT_HISTORY_DIR.mkdir(exist_ok=True)
 PYTHON = sys.executable
-_DEBUG_LOG_PATH = Path(r"c:\Users\acer\Documents\debug-ff45b0.log")
-
-
-def _agent_debug_log(location, message, data=None, hypothesis_id="", run_id="pre-fix"):
-    # #region agent log
-    try:
-        payload = {
-            "sessionId": "ff45b0",
-            "runId": run_id,
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data or {},
-            "timestamp": int(datetime.now().timestamp() * 1000),
-        }
-        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-    # #endregion
 
 VIETNAM_TZ = timezone(timedelta(hours=7))
 SESSION_API_CALLS = 0
@@ -82,19 +62,23 @@ if OPENROUTER_API_KEY.startswith("'") and OPENROUTER_API_KEY.endswith("'"):
 
 # Optional: set CLAUDE_MODEL in .env to override default
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+NOTEBOOKLM_PROFILE = os.environ.get("NOTEBOOKLM_PROFILE", "default").strip() or "default"
 
 client = None
+
+_PROFILE_NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
 
 
 def reload_config():
     """Reload .env and reset API client (after GUI saves settings)."""
-    global OPENROUTER_API_KEY, CLAUDE_MODEL, MAX_TOKENS, LANGUAGE, client
+    global OPENROUTER_API_KEY, CLAUDE_MODEL, MAX_TOKENS, LANGUAGE, NOTEBOOKLM_PROFILE, client
     if load_dotenv:
         load_dotenv(ENV_FILE, override=True)
     OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "").strip()
     CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
     MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "2500"))
     LANGUAGE = os.environ.get("LANGUAGE", LANGUAGE)
+    NOTEBOOKLM_PROFILE = os.environ.get("NOTEBOOKLM_PROFILE", "default").strip() or "default"
     client = None
 
 
@@ -117,7 +101,9 @@ def get_client():
     return client
 
 
-def save_env_settings(api_key, model=None, max_tokens=None, language=None):
+def save_env_settings(
+    api_key, model=None, max_tokens=None, language=None, notebooklm_profile=None
+):
     """Save user settings to .env (one-time key paste from GUI)."""
     lines = []
     if ENV_FILE.exists():
@@ -128,6 +114,7 @@ def save_env_settings(api_key, model=None, max_tokens=None, language=None):
                 "CLAUDE_MODEL",
                 "MAX_TOKENS",
                 "LANGUAGE",
+                "NOTEBOOKLM_PROFILE",
             ):
                 continue
             if line.strip():
@@ -137,18 +124,120 @@ def save_env_settings(api_key, model=None, max_tokens=None, language=None):
     lines.append(f"MAX_TOKENS={max_tokens or MAX_TOKENS}")
     if language:
         lines.append(f"LANGUAGE={language.strip()}")
+    profile = (notebooklm_profile or NOTEBOOKLM_PROFILE or "default").strip()
+    lines.append(f"NOTEBOOKLM_PROFILE={profile}")
     ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
     reload_config()
 
 
-def notebooklm_cmd(*args):
+def get_notebooklm_profile():
+    return NOTEBOOKLM_PROFILE or "default"
+
+
+def validate_profile_name(name: str) -> str | None:
+    """Return error message if invalid, else None."""
+    name = (name or "").strip()
+    if not name:
+        return "Profile name is required."
+    if not _PROFILE_NAME_RE.match(name):
+        return (
+            "Use letters, numbers, hyphens, underscores only "
+            "(must start with a letter or digit)."
+        )
+    return None
+
+
+def list_notebooklm_profiles():
+    """
+    Return list of dicts: name, active, authenticated.
+    On CLI failure returns [].
+    """
+    result = run_notebooklm(["profile", "list", "--json"], timeout=30, use_profile=False)
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return []
+    return data.get("profiles", [])
+
+
+def set_notebooklm_profile(name: str) -> tuple[bool, str]:
+    """Switch active NotebookLM profile and persist to .env."""
+    err = validate_profile_name(name)
+    if err:
+        return False, err
+
+    switch = run_notebooklm(["profile", "switch", name], timeout=30, use_profile=False)
+    if switch.returncode != 0:
+        detail = (switch.stderr or switch.stdout or "").strip()
+        return False, detail or f"Could not switch to profile '{name}'."
+
+    global NOTEBOOKLM_PROFILE
+    NOTEBOOKLM_PROFILE = name
+    os.environ["NOTEBOOKLM_PROFILE"] = name
+
+    if ENV_FILE.exists():
+        lines = []
+        found = False
+        for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+            if line.startswith("NOTEBOOKLM_PROFILE="):
+                lines.append(f"NOTEBOOKLM_PROFILE={name}")
+                found = True
+            elif line.strip():
+                lines.append(line)
+        if not found:
+            lines.append(f"NOTEBOOKLM_PROFILE={name}")
+        ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    reload_config()
+    return True, name
+
+
+def create_notebooklm_profile(name: str) -> tuple[bool, str]:
+    """Create a new empty NotebookLM profile."""
+    err = validate_profile_name(name)
+    if err:
+        return False, err
+
+    result = run_notebooklm(["profile", "create", name], timeout=30, use_profile=False)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        if "already exists" in detail.lower():
+            return False, f"Profile '{name}' already exists."
+        return False, detail or f"Could not create profile '{name}'."
+    return True, name
+
+
+def launch_notebooklm_login(profile=None, browser_cookies=True):
+    """Open login in a new terminal (Chrome cookies = fast, no Chromium lock)."""
+    profile = profile or get_notebooklm_profile()
+    cmd = [PYTHON, "-m", "notebooklm", "-p", profile, "login"]
+    if browser_cookies:
+        cmd.extend(["--browser-cookies", "chrome"])
+    kwargs = {"cwd": str(PROJECT_DIR)}
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
+    subprocess.Popen(cmd, **kwargs)
+
+
+def notebooklm_cmd(*args, profile=None):
     """Build NotebookLM CLI command using the same Python as this script."""
-    return [PYTHON, "-m", "notebooklm", *args]
+    cmd = [PYTHON, "-m", "notebooklm"]
+    prof = profile if profile is not None else get_notebooklm_profile()
+    if prof:
+        cmd.extend(["-p", prof])
+    cmd.extend(args)
+    return cmd
 
 
-def run_notebooklm(cli_args, timeout=60):
+def run_notebooklm(cli_args, timeout=60, use_profile=True, profile=None):
     """Run a NotebookLM CLI command."""
-    cmd = [str(PYTHON), "-m", "notebooklm", *[str(a) for a in cli_args]]
+    cmd = [str(PYTHON), "-m", "notebooklm"]
+    if use_profile:
+        prof = profile if profile is not None else get_notebooklm_profile()
+        if prof:
+            cmd.extend(["-p", prof])
+    cmd.extend([str(a) for a in cli_args])
     return subprocess.run(
         cmd,
         capture_output=True,
@@ -249,7 +338,7 @@ def ensure_notebooklm_login():
         return notebooks
 
     print("⚠️  NotebookLM session expired or not logged in. Opening login...")
-    subprocess.run(notebooklm_cmd("login"))
+    launch_notebooklm_login(get_notebooklm_profile(), browser_cookies=True)
 
     print("🔄 Loading notebooks again...")
     return fetch_notebooks()
@@ -425,20 +514,6 @@ def analyze_with_claude(notebook_answer, question=""):
     lang_rule = _analysis_language_rule(lang)
     sections = _analysis_report_sections(lang)
 
-    # #region agent log
-    _agent_debug_log(
-        "research_agent.py:analyze_with_claude:entry",
-        "Starting Claude analysis",
-        {
-            "model": CLAUDE_MODEL,
-            "lang": lang,
-            "question_len": len(question or ""),
-            "notebook_answer_len": len(str(notebook_answer or "")),
-        },
-        hypothesis_id="H1,H5",
-    )
-    # #endregion
-
     try:
         response = get_client().chat.completions.create(
             model=CLAUDE_MODEL,
@@ -482,83 +557,16 @@ def analyze_with_claude(notebook_answer, question=""):
         SESSION_API_CALLS += 1
 
         full_text = ""
-        chunk_idx = 0
-        resolved_model = CLAUDE_MODEL
         for chunk in response:
-            chunk_idx += 1
-            if getattr(chunk, "model", None):
-                resolved_model = chunk.model
-
-            choice = chunk.choices[0] if chunk.choices else None
-            delta = choice.delta if choice else None
-            content = delta.content if delta and delta.content else None
-            finish_reason = getattr(choice, "finish_reason", None) if choice else None
-
-            delta_extra = {}
-            if delta is not None:
-                dump = (
-                    delta.model_dump()
-                    if hasattr(delta, "model_dump")
-                    else getattr(delta, "__dict__", {})
-                )
-                delta_extra = {
-                    k: (str(v)[:200] if v is not None else None)
-                    for k, v in dump.items()
-                    if k != "content" and v is not None
-                }
-
-            if chunk_idx <= 3 or (content and "safety" in content.lower()):
-                # #region agent log
-                _agent_debug_log(
-                    "research_agent.py:analyze_with_claude:chunk",
-                    "Stream chunk received",
-                    {
-                        "chunk_idx": chunk_idx,
-                        "resolved_model": resolved_model,
-                        "content_preview": (content or "")[:300],
-                        "content_len": len(content or ""),
-                        "finish_reason": finish_reason,
-                        "delta_extra_keys": list(delta_extra.keys()),
-                        "delta_extra": delta_extra,
-                        "chunk_error": getattr(chunk, "error", None),
-                    },
-                    hypothesis_id="H1,H2,H3,H4",
-                )
-                # #endregion
-
-            if content:
-                full_text += content
-                yield content
-
-        # #region agent log
-        _agent_debug_log(
-            "research_agent.py:analyze_with_claude:done",
-            "Stream finished",
-            {
-                "resolved_model": resolved_model,
-                "total_chunks": chunk_idx,
-                "full_text_len": len(full_text),
-                "full_text_preview": full_text[:500],
-                "looks_like_safety_json": bool(
-                    re.search(r"user safety|response safety", full_text, re.I)
-                ),
-            },
-            hypothesis_id="H1,H2,H3",
-        )
-        # #endregion
+            if chunk.choices[0].delta.content:
+                text = chunk.choices[0].delta.content
+                full_text += text
+                yield text
 
         return full_text
 
     except Exception as e:
         err = str(e)
-        # #region agent log
-        _agent_debug_log(
-            "research_agent.py:analyze_with_claude:exception",
-            "Claude analysis failed",
-            {"error": err[:400], "model": CLAUDE_MODEL},
-            hypothesis_id="H3,H4",
-        )
-        # #endregion
         if "402" in err or "credit" in err.lower() or "insufficient" in err.lower():
             print("❌ OpenRouter: payment required (402) — cannot run this model now.")
             print("   The meter bar is your KEY cap, not wallet balance.")
